@@ -24,7 +24,7 @@
   - GIoU, DIoU, CIoU, SIoU, EIoU, WIoU
   - YOLO 버전별 IoU 채택
   - DETR 계열 IoU 사용법
-- [IOU 상세 설명](iou/DETAILED.md)
+- [IoU 상세 설명](iou/DETAILED.md)
 
 ### 4. Loss 함수
 - [Loss 함수 기본 개념](loss/README.md)
@@ -53,7 +53,7 @@
 ## 📊 YOLO vs DETR 비교
 
 | 측면 | YOLO 시리즈 | DETR 계열 |
-|--|--|--|
+|:---|:---|:---|
 | 아키텍처 | One-stage | Transformer |
 | 속도 | 빠름 (200-600 FPS) | 느림 (70-150 FPS) |
 | 정확도 | 높음 | 매우 높음 |
@@ -117,7 +117,7 @@ for epoch in range(100):
 ### COCO Validation Set
 
 | Model | mAP | Speed | Params | Type |
-|--|--|----|----|----|----|
+|:---|:---|:---|:---|:---|
 | **YOLOv8n** | 37.3 | 615 FPS | 3.2M | One-stage |
 | **YOLOv8s** | 44.9 | 480 FPS | 11.1M | One-stage |
 | **YOLOv8m** | 50.2 | 295 FPS | 25.9M | One-stage |
@@ -194,7 +194,7 @@ for epoch in range(100):
 
 **Anchor-based** (SSD, RetinaNet, Faster R-CNN):
 - Default boxes 사용
-- Multiple scales와 aspects 학습
+- Multiple scales 와 aspects 학습
 - Post-processing (NMS) 필요
 
 **Anchor-free** (FCOS, CenterNet, YOLOv8):
