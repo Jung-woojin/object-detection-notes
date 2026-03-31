@@ -223,9 +223,9 @@ class PGIBlock(nn.Module):
 ```
 YOLOv10 Structure:
 ┌─────────────────────────────────────────┐
-│  Backbone: CSPNet (modified)           │
-│  Neck: RepNCSPELAN4                      │
-│  Head: Matching-based                    │
+│  Backbone: CSPNet (modified)            │
+│  Neck: RepNCSPELAN4                     │
+│  Head: Matching-based                   │
 └─────────────────────────────────────────┘
 ```
 
@@ -386,10 +386,10 @@ class YOLOWorldHead(nn.Module):
 ```
 DETR Architecture:
 ┌─────────────────────────────────────────┐
-│  Backbone: ResNet-50                   │
-│  Transformer Encoder/Decoder           │
-│  Linear Classifiers & Regressors       │
-│  Bipartite Matching                    │
+│  Backbone: ResNet-50                    │
+│  Transformer Encoder/Decoder            │
+│  Linear Classifiers & Regressors        │
+│  Bipartite Matching                     │
 └─────────────────────────────────────────┘
 ```
 
