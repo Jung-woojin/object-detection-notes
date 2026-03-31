@@ -1,0 +1,60 @@
+# Object Detection - Head Characteristics & NMS
+
+## Overview
+Non-Maximum Suppression (NMS) variations based on detection head characteristics.
+
+## Key Concepts
+- Each detection head (classification, regression, objectness) has different characteristics
+- NMS strategy should adapt based on head behavior and confidence distributions
+- Some heads don't need traditional NMS (e.g., anchor-free, center-based approaches)
+
+## NMS-Free / NMS-Variant Heads
+
+### 1. **Anchor-Free / Center-Based**
+- FCOS, CenterNet, FCOS-TRUNK
+- Use center distance/penalty instead of overlap-based NMS
+- Single peak per object naturally
+
+### 2. **DETR-style (Transformer)**
+- Deformable DETR, DINO, DN-DETR
+- Set-based prediction with bipartite matching
+- No post-processing NMS needed - one prediction per class
+
+### 3. **FCOS + CornerNet**
+- Corner detection based
+- Pairing instead of overlap suppression
+- Use distance thresholds
+
+### 4. **YOLO variants with Objectness**
+- YOLOv7, YOLOv8, YOLOv9
+- Objectness score reduces false positives
+- Can use soft-NMS or variant approaches
+
+## NMS Strategies by Head Type
+
+| Head Type | Traditional NMS | Soft-NMS | DIoU-NMS | Panoptic NMS |
+|-----------|----------------|----------|----------|--------------|
+| Anchor-based (SSD) | ✓ | ✓ | ✓ | - |
+| Anchor-free (FCOS) | - | ✓ | ✓ | - |
+| Transformer (DETR) | ✗ | ✗ | ✗ | ✓ |
+| Corner-based | - | - | ✓ | - |
+| Centroid-based | - | ✓ | ✓ | ✓ |
+
+## Notes
+
+### When NMS is not needed:
+1. **Per-class max pooling**: If head produces single max per class
+2. **Set prediction**: Transformer approaches with Hungarian matching
+3. **Center-based**: When center points are distinct
+
+### When to use variant NMS:
+1. **Occlusion cases**: Soft-NMS or weighted averaging
+2. **Tightly packed objects**: DIoU-NMS, SIoU-NMS
+3. **Different scale objects**: Multi-level NMS
+4. **Pose/Keypoint heads**: Joint constraints instead of NMS
+
+## References
+- FCOS: "Fully Convolutional One-Stage Object Detection"
+- DETR: "End-to-End Object Detection with Transformers"
+- YOLOv7: "YOLOv7: Trainable bag-of-freebies"
+- Soft-NMS: "Improved Object Detection with Soft Non-Maximum Suppression"
