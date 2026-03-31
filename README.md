@@ -27,8 +27,8 @@
 YOLOv8 Structure:
 ┌─────────────────────────────────────────┐
 │  Backbone: CSPDarknet (no PANet)        │
-│  Neck: PANet (Path Aggregation)        │
-│  Head: Decoupled Head (Sep Conv)       │
+│  Neck: PANet (Path Aggregation)         │
+│  Head: Decoupled Head (Sep Conv)        │
 └─────────────────────────────────────────┘
 ```
 
