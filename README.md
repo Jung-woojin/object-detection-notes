@@ -1112,5 +1112,750 @@ where:
 
 ---
 
-*최종 업데이트: 2026-03-31*
-*Complete research bible for modern object detection*
+---
+
+## 🛠️ 실전 인프런스 가이드
+
+### YOLO-World Zero-shot Inference
+
+```python
+from ultralytics import YOLO
+
+class OpenVocabularyDetector:
+    """
+    YOLO-World 기반 오픈 보카블러리 디텍터
+    
+    Usage:
+        detector = OpenVocabularyDetector('yolo-world.pt')
+        results = detector.detect(image, "dog and cat")
+    """
+    
+    def __init__(self, model_path='yolo-world.pt'):
+        """
+        Initialize the detector
+        
+        Args:
+            model_path: Path to YOLO-World checkpoint
+        """
+        self.model = YOLO(model_path)
+        self.model.eval()
+    
+    def detect(self, image_path, text_prompt, conf_threshold=0.3, imgsz=640):
+        """
+        Detect objects using text prompt
+        
+        Args:
+            image_path: Path to input image
+            text_prompt: Text description of target objects
+                Examples: "dog", "car", "electric vehicle"
+            conf_threshold: Confidence threshold (default: 0.3)
+            imgsz: Image size for inference (default: 640)
+        
+        Returns:
+            list: List of detections with class, confidence, bbox
+        """
+        # Run detection
+        results = self.model.predict(
+            source=image_path,
+            conf=conf_threshold,
+            imgsz=imgsz,
+            text_prompt=text_prompt,
+            verbose=False
+        )
+        
+        # Extract results
+        detections = []
+        for result in results:
+            boxes = result.boxes
+            for i in range(len(boxes)):
+                detection = {
+                    'class_id': int(boxes.cls[i]),
+                    'confidence': float(boxes.conf[i]),
+                    'bbox': boxes.xyxy[i].tolist(),
+                    'class_name': result.names[int(boxes.cls[i])],
+                    'text_prompt': text_prompt
+                }
+                detections.append(detection)
+        
+        return detections
+    
+    def detect_multi_class(self, image_path, class_names, conf_threshold=0.3):
+        """
+        Detect multiple classes with custom names
+        
+        Args:
+            image_path: Path to input image
+            class_names: List of class names to detect
+                Example: ['dog', 'cat', 'bicycle']
+            conf_threshold: Confidence threshold
+        
+        Returns:
+            list: List of detections
+        """
+        # Build natural language prompt
+        if len(class_names) == 1:
+            text_prompt = class_names[0]
+        else:
+            text_prompt = ', '.join(class_names[:-1]) + ' and ' + class_names[-1]
+        
+        return self.detect(image_path, text_prompt, conf_threshold)
+```
+
+### Custom Category Fine-tuning
+
+```python
+# Define custom classes
+custom_classes = {
+    'electric_vehicle': ['electric car', 'electric bus', 'electric truck'],
+    'drone_types': ['quadcopter', 'hexacopter', 'fixed-wing drone'],
+    'traffic_signs': ['speed limit sign', 'stop sign', 'yield sign']
+}
+
+# Create fine-tuning dataset
+from datasets import Dataset
+
+def create_fine_tuning_dataset(images, prompts, annotations):
+    """
+    Create dataset for custom category fine-tuning
+    
+    Args:
+        images: List of image paths
+        prompts: List of text prompts for each image
+        annotations: List of annotation dicts
+    
+    Returns:
+        Dataset: HuggingFace dataset
+    """
+    data = []
+    for img, prompt, annot in zip(images, prompts, annotations):
+        data.append({
+            'image': img,
+            'text_prompt': prompt,
+            'annotations': annot
+        })
+    
+    return Dataset.from_list(data)
+
+# Fine-tune YOLO-World
+from ultralytics import YOLO
+
+model = YOLO('yolo-world.pt')
+
+# Custom training config
+train_config = {
+    'data': 'custom_classes.yaml',
+    'epochs': 30,
+    'batch': 8,
+    'imgsz': 640,
+    'lr0': 0.0001,
+    'freeze_text_encoder': False,
+    'freeze_backbone': False,
+    'patience': 10,
+    'save': True,
+    'project': 'runs/detect',
+    'name': 'custom_open_vocab'
+}
+
+model.train(**train_config)
+
+# Evaluate
+results = model.val(data='custom_classes.yaml', iou=0.5)
+print(f"mAP (custom): {results.box.map:.4f}")
+print(f"mAP50: {results.box.map50:.4f}")
+print(f"mAP75: {results.box.map75:.4f}")
+```
+
+### YOLO-World Real-world Example
+
+```python
+import cv2
+from open_vocabulary_detector import OpenVocabularyDetector
+
+def detect_traffic_objects(video_path, output_path):
+    """
+    Detect traffic-related objects in video
+    
+    Args:
+        video_path: Path to input video
+        output_path: Path to save output video
+    """
+    # Initialize detector
+    detector = OpenVocabularyDetector('yolo-world.pt')
+    
+    # Define target objects
+    traffic_objects = [
+        'car', 'bus', 'truck', 'motorcycle',
+        'traffic light', 'stop sign', 'speed limit sign',
+        'pedestrian', 'bicycle'
+    ]
+    
+    # Process video
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    
+    frame_count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Detect objects
+        detections = detector.detect_multi_class(
+            image_path=frame,
+            class_names=traffic_objects,
+            conf_threshold=0.25
+        )
+        
+        # Draw results
+        for det in detections:
+            bbox = det['bbox']
+            class_name = det['class_name']
+            confidence = det['confidence']
+            
+            x1, y1, x2, y2 = [int(p) for p in bbox]
+            
+            # Draw bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            
+            # Draw label
+            label = f"{class_name}: {confidence:.2f}"
+            cv2.putText(
+                frame, label, (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
+            )
+        
+        # Write frame
+        out.write(frame)
+        frame_count += 1
+        
+        # Progress
+        if frame_count % 30 == 0:
+            print(f"Processed {frame_count} frames")
+    
+    cap.release()
+    out.release()
+    print(f"Saved result to {output_path}")
+
+# Usage
+detect_traffic_objects('input.mp4', 'output.mp4')
+```
+
+---
+
+## 🔬 연구 방향 제안
+
+### PhD 연구 아이디어
+
+#### 1. **Adaptive NMS-free Detection**
+
+**Problem Statement:**
+- Current NMS-free methods have accuracy limitations
+- Need adaptive matching for complex scenes
+
+**Research Direction:**
+- Dynamic IoU threshold learning
+- Learning-based NMS-free matching
+- Context-aware object association
+
+**Technical Approach:**
+```python
+class AdaptiveNMSFree(nn.Module):
+    """
+    NMS-free with adaptive matching
+    
+    Key innovations:
+    1. Learnable matching threshold
+    2. Context-aware confidence scoring
+    3. Multi-scale proposal fusion
+    """
+    
+    def __init__(self, num_classes=80):
+        super().__init__()
+        
+        # Adaptive matching
+        self.match_threshold = nn.Parameter(
+            torch.tensor(0.5)
+        )
+        
+        # Context encoder
+        self.context_encoder = ContextEncoder()
+        
+        # Proposal fusion
+        self.fusion = MultiScaleFusion()
+        
+        # Detection head
+        self.head = DetectionHead(num_classes)
+    
+    def forward(self, proposals, context_features):
+        # Adaptive matching
+        matched = self.adaptive_matching(
+            proposals, self.match_threshold
+        )
+        
+        # Context-aware scoring
+        context_scores = self.context_encoder(
+            matched, context_features
+        )
+        
+        # Fusion and detection
+        fused = self.fusion(matched, context_scores)
+        predictions = self.head(fused)
+        
+        return predictions
+    
+    def adaptive_matching(self, proposals, threshold):
+        """
+        Learnable matching threshold
+        """
+        # Dynamic threshold based on scene complexity
+        scene_complexity = self.estimate_complexity(proposals)
+        adaptive_threshold = threshold * scene_complexity
+        
+        # Matching based on adaptive threshold
+        matches = self.hungarian_match(
+            proposals, adaptive_threshold
+        )
+        
+        return matches
+```
+
+---
+
+#### 2. **Multi-scale ERF Optimization**
+
+**Problem Statement:**
+- Single-scale ERF optimization is insufficient
+- Multi-scale detection requires dynamic receptive fields
+
+**Research Direction:**
+- Scale-aware feature fusion
+- Dynamic ERF modulation
+- Adaptive feature selection
+
+**Technical Approach:**
+```python
+class DynamicERF(nn.Module):
+    """
+    Dynamic Receptive Field for multi-scale detection
+    
+    Key innovations:
+    1. Scale-aware attention
+    2. Dynamic ERF modulation
+    3. Multi-scale feature selection
+    """
+    
+    def __init__(self, d_model=256, num_scales=4):
+        super().__init__()
+        self.num_scales = num_scales
+        
+        # Scale-aware attention
+        self.scale_attention = nn.ModuleList([
+            ScaleAttention(d_model) for _ in range(num_scales)
+        ])
+        
+        # ERF modulation
+        self.erf_modulator = ERFLayer(d_model)
+        
+        # Feature selection
+        self.feature_selector = FeatureSelector(d_model)
+    
+    def forward(self, features, target_scales):
+        """
+        Dynamic ERF optimization
+        
+        Args:
+            features: Multi-scale features
+            target_scales: Target object scales
+        
+        Returns:
+            optimized_features: Features with optimized ERF
+        """
+        # Scale-aware attention
+        attended_features = []
+        for i, feat in enumerate(features):
+            scale_attn = self.scale_attention[i](feat, target_scales)
+            attended_features.append(scale_attn)
+        
+        # ERF modulation
+        modulated = self.erf_modulator(
+            torch.cat(attended_features, dim=1),
+            target_scales
+        )
+        
+        # Feature selection
+        optimized = self.feature_selector(modulated, target_scales)
+        
+        return optimized
+```
+
+---
+
+#### 3. **Real-time Open-Vocabulary Detection**
+
+**Problem Statement:**
+- Current real-time methods have limited vocabulary
+- Need faster open-vocabulary detection
+
+**Research Direction:**
+- Efficient text encoders
+- Lightweight CLIP adaptation
+- Real-time zero-shot detection
+
+**Technical Approach:**
+```python
+class RealTimeOpenVocab(nn.Module):
+    """
+    Real-time open-vocabulary detection
+    
+    Key innovations:
+    1. Efficient text encoding
+    2. Lightweight CLIP adaptation
+    3. Real-time zero-shot inference
+    """
+    
+    def __init__(self, text_encoder='efficient_clip'):
+        super().__init__()
+        
+        # Efficient text encoder
+        self.text_encoder = EfficientTextEncoder()
+        
+        # Lightweight CLIP adaptation
+        self.clip_adaptor = LightCLIPAdapter()
+        
+        # Detection head
+        self.detection_head = DetectionHead()
+        
+        # Semantic alignment
+        self.semantic_align = SemanticAlignment()
+    
+    def forward(self, images, text_prompts):
+        """
+        Real-time open-vocabulary detection
+        
+        Args:
+            images: Input images
+            text_prompts: Text prompts for detection
+        
+        Returns:
+            detections: Open-vocabulary detections
+        """
+        # Efficient text encoding
+        text_embeddings = self.text_encoder(text_prompts)
+        
+        # Lightweight adaptation
+        adapted_features = self.clip_adaptor(text_embeddings)
+        
+        # Image feature extraction
+        image_features = self.extract_features(images)
+        
+        # Semantic alignment
+        aligned = self.semantic_align(image_features, adapted_features)
+        
+        # Detection
+        predictions = self.detection_head(aligned)
+        
+        return predictions
+    
+    def efficient_text_encoder(self, prompts):
+        """
+        Efficient text encoding
+        
+        Key features:
+        - Quantized text encoder
+        - Shared embeddings
+        - Cached computations
+        """
+        # Quantized encoding
+        encoded = self.quantized_encode(prompts)
+        
+        # Shared embeddings
+        shared = self.shared_embeddings(encoded)
+        
+        # Cached computations
+        cached = self.cache_computations(shared)
+        
+        return cached
+```
+
+---
+
+#### 4. **Meta-Learning for Few-shot Detection**
+
+**Problem Statement:**
+- Training data limited for new classes
+- Need fast adaptation to new categories
+
+**Research Direction:**
+- Meta-learning framework
+- Fast adaptation algorithms
+- One-shot/few-shot detection
+
+**Technical Approach:**
+```python
+class MetaFewShotDetector(nn.Module):
+    """
+    Meta-learning for few-shot detection
+    
+    Key innovations:
+    1. Meta-learning objective
+    2. Fast adaptation mechanism
+    3. Support set optimization
+    """
+    
+    def __init__(self, base_detector, support_size=5):
+        super().__init__()
+        self.base_detector = base_detector
+        self.support_size = support_size
+        
+        # Meta-learner
+        self.meta_learner = MetaLearner()
+        
+        # Support encoder
+        self.support_encoder = SupportEncoder()
+        
+        # Adaptation network
+        self.adaptation_net = AdaptationNetwork()
+    
+    def meta_train(self, support_set, query_set):
+        """
+        Meta-learning training
+        
+        Args:
+            support_set: {(img, label)} tuples
+            query_set: Query images for evaluation
+        
+        Returns:
+            adapted_model: Few-shot adapted model
+        """
+        # Extract support features
+        support_features = self.support_encoder(support_set)
+        
+        # Meta-update
+        adapted_model = self.meta_learner.update(
+            self.base_detector,
+            support_features,
+            query_set
+        )
+        
+        # Evaluate on query set
+        loss = self.evaluate(adapted_model, query_set)
+        
+        # Update meta-parameters
+        loss.backward()
+        
+        return adapted_model
+    
+    def adapt_to_class(self, support_images, support_labels, target_class):
+        """
+        Adapt to new class with few examples
+        
+        Args:
+            support_images: N support images (N=1-5)
+            support_labels: Corresponding labels
+            target_class: Target class name
+        
+        Returns:
+            adapted_model: Model adapted to new class
+        """
+        # Encode support set
+        support_emb = self.support_encoder(support_images)
+        
+        # Compute class embedding
+        class_emb = self.compute_class_embedding(support_emb, support_labels)
+        
+        # Adapt detection head
+        adapted_head = self.adaptation_net(
+            self.base_detector.head,
+            class_emb
+        )
+        
+        # Create adapted model
+        adapted_model = copy.deepcopy(self.base_detector)
+        adapted_model.head = adapted_head
+        
+        return adapted_model
+```
+
+---
+
+#### 5. **Multimodal Open-Vocabulary Detection**
+
+**Problem Statement:**
+- Text-only prompts limit detection capabilities
+- Need multimodal understanding
+
+**Research Direction:**
+- Image-text joint understanding
+- Visual question answering integration
+- Multimodal feature fusion
+
+**Technical Approach:**
+```python
+class MultimodalOpenVocab(nn.Module):
+    """
+    Multimodal open-vocabulary detection
+    
+    Key innovations:
+    1. Image-text joint understanding
+    2. Visual question answering
+    3. Multimodal feature fusion
+    """
+    
+    def __init__(self, vision_encoder, text_encoder):
+        super().__init__()
+        
+        # Vision encoder
+        self.vision_encoder = vision_encoder
+        
+        # Text encoder
+        self.text_encoder = text_encoder
+        
+        # Multimodal fusion
+        self.fusion = MultimodalFusion()
+        
+        # VQA module
+        self.vqa_module = VisualQAModule()
+        
+        # Detection head
+        self.detection_head = DetectionHead()
+    
+    def forward(self, images, queries):
+        """
+        Multimodal detection
+        
+        Args:
+            images: Input images
+            queries: Text queries/questions
+        
+        Returns:
+            detections: Multimodal detections
+        """
+        # Extract features
+        vision_features = self.vision_encoder(images)
+        text_features = self.text_encoder(queries)
+        
+        # Multimodal fusion
+        fused = self.fusion(vision_features, text_features)
+        
+        # VQA integration
+        qa_insights = self.vqa_module(
+            vision_features, 
+            text_features
+        )
+        
+        # Detection
+        predictions = self.detection_head(fused, qa_insights)
+        
+        return predictions
+    
+    def multimodal_fusion(self, vision_features, text_features):
+        """
+        Multimodal feature fusion
+        
+        Key features:
+        - Cross-modal attention
+        - Feature alignment
+        - Joint representation
+        """
+        # Cross-modal attention
+        attended = self.cross_modal_attention(
+            vision_features,
+            text_features
+        )
+        
+        # Feature alignment
+        aligned = self.feature_alignment(attended)
+        
+        # Joint representation
+        joint_rep = self.joint_representation(aligned)
+        
+        return joint_rep
+```
+
+---
+
+## 📊 성능 벤치마크 추가
+
+### Computation Efficiency
+
+| Model | Parameters | FLOPs | Inference Time (ms) | Memory (MB) |
+|-------|----------|-------|---------|---|----|
+| **YOLOv8** | 11.2M | 28.5G | 3.6 | 245 |
+| **YOLO-World** | 22.8M | 52.3G | 3.6 | 312 |
+| **Grounding DINO** | 202M | 421.6G | 125 | 1,024 |
+| **YOLOv9** | 25.1M | 58.9G | 3.4 | 345 |
+
+### Scalability Analysis
+
+**Image size impact:**
+
+| Image Size | YOLOv8 FPS | YOLO-World FPS |
+|------------|----------|------|----|
+| 320 | 295 | 280 |
+| 640 | 135 | 128 |
+| 1280 | 58 | 52 |
+| 1920 | 28 | 24 |
+
+**Batch size impact:**
+
+| Batch Size | YOLOv8 FPS | YOLO-World FPS |
+|------------|----------|------|----|
+| 1 | 135 | 128 |
+| 4 | 185 | 170 |
+| 8 | 220 | 195 |
+| 16 | 250 | 230 |
+
+---
+
+## 🎓 교육 자료
+
+### 학습 경로 (Beginner → Advanced)
+
+```
+Level 1: Fundamentals
+├── Object detection basics
+├── CNN architecture
+├── YOLOv8 implementation
+└── Training & evaluation
+
+Level 2: Advanced Topics
+├── Transformer-based detection
+├── DETR family analysis
+├── Open-vocabulary detection
+└── Real-time optimization
+
+Level 3: Research
+├── Current challenges
+├── Research directions
+├── Paper reading
+└── Implementation projects
+```
+
+### 추천 독서 순서
+
+1. **Basics:**
+   - "Deep Learning" by Goodfellow et al.
+   - "You Only Look Once" (YOLO v1 paper)
+   - "End-to-End Object Detection" (DETR paper)
+
+2. **Intermediate:**
+   - YOLOv4, v5, v6 papers
+   - Deformable DETR paper
+   - Ultralytics documentation
+
+3. **Advanced:**
+   - DINO paper
+   - YOLO-World paper
+   - RT-DETR paper
+   - Current research trends (CVPR 2024-2025)
+
+---
+
+*최종 업데이트: 2026-04-02*
+*Open-Vocabulary Detection + Real-time Optimization Guide*
+*PhD research directions + practical implementation*
